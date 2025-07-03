@@ -1,0 +1,20 @@
+StorageDiscovery - 2025-07-03 11:42:57,205 - fetch_storages - INFO - table_filter пустой, возвращен пустой список
+StorageDiscovery - 2025-07-03 11:43:50,864 - fetch_storages - INFO - Извлечено 29 систем хранения для площадки pd01
+StorageDiscovery - 2025-07-03 11:44:05,012 - discovery_form - INFO - Получение данных для отображения, table_filter: pd01
+StorageDiscovery - 2025-07-03 11:44:05,013 - discovery_form - INFO - Получение всех данных discovery
+StorageDiscovery - 2025-07-03 11:44:05,013 - fetch_discovery_data - INFO - Получение данных discovery для площадки pd01
+StorageDiscovery - 2025-07-03 11:44:05,015 - fetch_discovery_data - WARNING - Нет записей discovery для площадки pd01
+StorageDiscovery - 2025-07-03 11:44:05,016 - discovery_form - INFO - Получено 0 систем для отображения
+StorageDiscovery - 2025-07-03 11:48:08,557 - fetch_storages - INFO - Извлечено 29 систем хранения для площадки pd01
+StorageDiscovery - 2025-07-03 11:49:48,911 - discovery_form - INFO - Получение данных для отображения, table_filter: pd01
+StorageDiscovery - 2025-07-03 11:49:48,911 - discovery_form - INFO - Получение всех данных discovery
+StorageDiscovery - 2025-07-03 11:49:48,911 - fetch_discovery_data - INFO - Получение данных discovery для площадки pd01
+StorageDiscovery - 2025-07-03 11:49:48,912 - fetch_discovery_data - WARNING - Нет записей discovery для площадки pd01
+StorageDiscovery - 2025-07-03 11:49:48,912 - discovery_form - INFO - Получено 0 систем для отображения
+StorageDiscovery - 2025-07-03 11:52:11,034 - fetch_storages - INFO - Извлечено 29 систем хранения для площадки pd01
+StorageDiscovery - 2025-07-03 11:52:15,195 - fetch_storages - INFO - Извлечено 29 систем хранения для площадки pd01
+StorageDiscovery - 2025-07-03 11:52:17,315 - discovery_form - INFO - Получение данных для отображения, table_filter: pd01
+StorageDiscovery - 2025-07-03 11:52:17,315 - discovery_form - INFO - Получение всех данных discovery
+StorageDiscovery - 2025-07-03 11:52:17,315 - fetch_discovery_data - INFO - Получение данных discovery для площадки pd01
+StorageDiscovery - 2025-07-03 11:52:17,317 - fetch_discovery_data - WARNING - Нет записей discovery для площадки pd01
+StorageDiscovery - 2025-07-03 11:52:17,317 - discovery_form - INFO - Получено 0 систем для отображения
