@@ -32,12 +32,24 @@ See README.md file in the project root for full license information. -->
         min-width: 80px;
         color: #666;
         font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+      .collapsible-header .vendor-column:hover {
+        color: #26a69a;
+        transform: scale(1.05);
       }
       .collapsible-header .role-column {
         /* width: 250px; /* Increased width significantly */ 
         min-width: 250px; /* Give it more minimum space */
+        cursor: pointer;
+        transition: all 0.3s ease;
         /* No overflow or ellipsis, allow it to take space */
         /* flex-shrink: 0; */
+      }
+      .collapsible-header .role-column:hover {
+        color: #26a69a;
+        transform: scale(1.05);
       }
       .collapsible-header .status-column {
         min-width: 90px;
@@ -95,6 +107,36 @@ See README.md file in the project root for full license information. -->
         border: 1px solid #ccc;
         border-radius: 3px;
         font-size: 13px;
+      }
+      
+      /* Sorting controls */
+      .sorting-controls {
+        margin: 15px 0;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+        border: 1px solid #e9ecef;
+      }
+      
+      .sort-btn {
+        background-color: #6c757d !important;
+        margin: 0 5px 5px 0;
+        padding: 8px 12px !important;
+        font-size: 12px !important;
+        height: auto !important;
+        line-height: 1.2 !important;
+      }
+      
+      .sort-btn.active {
+        background-color: #26a69a !important;
+      }
+      
+      .sort-btn:hover {
+        background-color: #5a6268 !important;
+      }
+      
+      .sort-btn.active:hover {
+        background-color: #1e8e7e !important;
       }
     </style>
   </head>
@@ -182,13 +224,22 @@ See README.md file in the project root for full license information. -->
       </div>
 
       {% if sorted_storage %}
-        <ul class="collapsible">
+        <!-- Sorting Controls -->
+        <div class="sorting-controls">
+          <span style="font-weight: bold; margin-right: 10px;">Сортировка:</span>
+          <button class="btn sort-btn" id="sort-default">По умолчанию</button>
+          <button class="btn sort-btn" id="sort-vendor">По вендору</button>
+          <button class="btn sort-btn" id="sort-role">По роли</button>
+          <button class="btn sort-btn" id="sort-name">По имени</button>
+        </div>
+
+        <ul class="collapsible" id="storage-list">
           {% for storage_name, data in sorted_storage %}
-            <li>
+            <li data-vendor="{{ data.vendor or 'Unknown' }}" data-role="{{ data.storage_role or 'Unknown' }}" data-name="{{ storage_name }}">
               <div class="collapsible-header">
                 <span class="name-column" style="color: {{ data.color if data.color else 'grey' }};">[{{ storage_name }}]</span>
-                <span class="vendor-column">[{{ data.vendor or 'Unknown' }}]</span>
-                <span class="role-column">[{{ data.storage_role or 'Не указано' }}]</span>
+                <span class="vendor-column" data-sort="vendor">[{{ data.vendor or 'Unknown' }}]</span>
+                <span class="role-column" data-sort="role">[{{ data.storage_role or 'Unknown' }}]</span>
                 <span class="status-column">[{{ data.storage_status or 'Не указано' }}]</span>
                 <span class="subscription-column">
                   {% if data.subscription_ratio is defined and data.subscription_ratio != 'N/A' %}
@@ -205,7 +256,7 @@ See README.md file in the project root for full license information. -->
                   {% if data.last_updated %}
                     Дата обновления: 
                     {% if data.last_updated is string %}
-                        {{ data.last_updated.split('.')[0] }} {# Handle string datetime from JSON #}
+                        {{ data.last_updated.split('.')[0] }}
                     {% else %}
                         {{ data.last_updated|moscow_time }}
                     {% endif %}
@@ -473,6 +524,90 @@ See README.md file in the project root for full license information. -->
 
         var modals = document.querySelectorAll('.modal');
         M.Modal.init(modals, {});
+
+        // Sorting functionality
+        let currentSort = 'default';
+        
+        function getVendorPriority(vendor) {
+          const priorities = { 'NetApp': 1, 'Huawei': 2, 'IBM': 3 };
+          return priorities[vendor] || 999;
+        }
+        
+        function getRolePriority(role) {
+          const priorities = {
+            'Storage Management': 1,
+            'Storage': 2,
+            'Storage Baremetal Public': 3,
+            'Storage VMware Public': 4,
+            'Storage VMware Private': 5,
+            'Storage VMware Public Sber': 6,
+            'Storage VMware Public DR Sber': 7
+          };
+          return priorities[role] || 999;
+        }
+        
+        function sortStorageList(sortBy) {
+          const storageList = document.getElementById('storage-list');
+          const items = Array.from(storageList.children);
+          
+          // Clear vendor border classes first
+          items.forEach(item => {
+            item.classList.remove('vendor-netapp', 'vendor-huawei', 'vendor-ibm', 'vendor-unknown');
+          });
+          
+          items.sort((a, b) => {
+            const vendorA = a.dataset.vendor;
+            const vendorB = b.dataset.vendor;
+            const roleA = a.dataset.role;
+            const roleB = b.dataset.role;
+            const nameA = a.dataset.name;
+            const nameB = b.dataset.name;
+            
+            switch(sortBy) {
+              case 'vendor':
+                const vendorCompare = getVendorPriority(vendorA) - getVendorPriority(vendorB);
+                if (vendorCompare !== 0) return vendorCompare;
+                return nameA.localeCompare(nameB);
+                
+              case 'role':
+                const roleCompare = getRolePriority(roleA) - getRolePriority(roleB);
+                if (roleCompare !== 0) return roleCompare;
+                return nameA.localeCompare(nameB);
+                
+              case 'name':
+                return nameA.localeCompare(nameB);
+                
+              default: // original order
+                return 0;
+            }
+          });
+          
+          // Reorder DOM elements
+          items.forEach(item => storageList.appendChild(item));
+          
+          // Add vendor border classes when sorting by vendor
+          if (sortBy === 'vendor') {
+            items.forEach(item => {
+              const vendor = item.dataset.vendor.toLowerCase();
+              item.classList.add(`vendor-${vendor}`);
+            });
+          }
+          
+          // Update active button
+          document.querySelectorAll('.sort-btn').forEach(btn => btn.classList.remove('active'));
+          document.getElementById(`sort-${sortBy}`).classList.add('active');
+          
+          currentSort = sortBy;
+        }
+        
+        // Sort button event listeners
+        document.getElementById('sort-default').addEventListener('click', () => sortStorageList('default'));
+        document.getElementById('sort-vendor').addEventListener('click', () => sortStorageList('vendor'));
+        document.getElementById('sort-role').addEventListener('click', () => sortStorageList('role'));
+        document.getElementById('sort-name').addEventListener('click', () => sortStorageList('name'));
+        
+        // Set default active button
+        document.getElementById('sort-default').classList.add('active');
 
         window.handleRefreshClick = function(icon, tableName, storageName) {
           icon.classList.add('clicked');

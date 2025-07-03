@@ -433,3 +433,32 @@
 .aggregate-group-1 td { 
   background:#e6f7ff !important; 
 }
+
+/* ========================================
+   VENDOR SORTING STYLES (MINIMAL)
+   ======================================== */
+
+/* Vendor-specific border colors - only shown when sorting by vendor */
+.collapsible li.vendor-netapp {
+  border-left: 5px solid #1976d2;
+  margin-bottom: 3px;
+  transition: border-left 0.3s ease;
+}
+
+.collapsible li.vendor-huawei {
+  border-left: 5px solid #f57c00;
+  margin-bottom: 3px;
+  transition: border-left 0.3s ease;
+}
+
+.collapsible li.vendor-ibm {
+  border-left: 5px solid #388e3c;
+  margin-bottom: 3px;
+  transition: border-left 0.3s ease;
+}
+
+.collapsible li.vendor-unknown {
+  border-left: 5px solid #757575;
+  margin-bottom: 3px;
+  transition: border-left 0.3s ease;
+}

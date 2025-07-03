@@ -894,6 +894,32 @@ def debug_discovery(table_name):
     except Exception as e:
         return f"<h1>Debug error</h1><pre>{str(e)}</pre>"
 
+# -------------------------------
+# Функции сортировки по вендору и роли
+# -------------------------------
+def get_vendor_priority(vendor):
+    """Возвращает приоритет вендора для сортировки"""
+    vendor_priorities = {
+        'NetApp': 1,
+        'Huawei': 2, 
+        'IBM': 3
+    }
+    return vendor_priorities.get(vendor, 999)  # Неизвестные вендоры в конце
+
+
+def get_role_priority(role):
+    """Возвращает приоритет роли для сортировки"""
+    role_priorities = {
+        'Storage Management': 1,
+        'Storage': 2,
+        'Storage Baremetal Public': 3,
+        'Storage VMware Public': 4,
+        'Storage VMware Private': 5,
+        'Storage VMware Public Sber': 6,
+        'Storage VMware Public DR Sber': 7
+    }
+    return role_priorities.get(role, 999)  # Неизвестные роли в конце
+
 
 # Упрощенная тестовая функция discovery
 @app.route('/test_discovery/<table_name>')
@@ -957,10 +983,10 @@ def test_discovery(table_name):
         return f"Ошибка: {str(e)}"
 
 # -------------------------------
-# Поиск по IQN/WWN
+# Поиск по IQN/WWN (ОБНОВЛЕННАЯ ВЕРСИЯ С СОРТИРОВКОЙ)
 # -------------------------------
 def search_iqn_wwn(search_query, wwn_query, table_filter, search_all=False):
-    """Поиск по IQN инициаторов или WWN LUN"""
+    """Поиск по IQN инициаторов или WWN LUN с сортировкой"""
     if not search_query:
         return []
 
@@ -996,7 +1022,17 @@ def search_iqn_wwn(search_query, wwn_query, table_filter, search_all=False):
                     storage_name = initiator.get('storage_name', '')
                     if storage_name not in [s[0] for s in found_storage]:
                         storage_data = build_storage_data(storage_name, data, table_name)
-                        found_storage.append((storage_name, storage_data))
+                        
+                        # Получаем информацию о системе для сортировки
+                        storage_info = StorageSystem.query.filter_by(
+                            table_name=table_name,
+                            storage_name=storage_name
+                        ).first()
+                        
+                        vendor = storage_info.vendor if storage_info else 'Unknown'
+                        role = storage_info.storage_role if storage_info else 'Unknown'
+                        
+                        found_storage.append((storage_name, storage_data, vendor, role))
             
             # Поиск среди LUN по WWN
             for lun in data.get('luns', []):
@@ -1004,21 +1040,39 @@ def search_iqn_wwn(search_query, wwn_query, table_filter, search_all=False):
                     storage_name = lun.get('storage_name', '')
                     if storage_name not in [s[0] for s in found_storage]:
                         storage_data = build_storage_data(storage_name, data, table_name)
-                        found_storage.append((storage_name, storage_data))
+                        
+                        # Получаем информацию о системе для сортировки
+                        storage_info = StorageSystem.query.filter_by(
+                            table_name=table_name,
+                            storage_name=storage_name
+                        ).first()
+                        
+                        vendor = storage_info.vendor if storage_info else 'Unknown'
+                        role = storage_info.storage_role if storage_info else 'Unknown'
+                        
+                        found_storage.append((storage_name, storage_data, vendor, role))
         
         except Exception as e:
             logger.exception(f"Ошибка при поиске в данных для {table_name}: {str(e)}")
             continue
     
-    return found_storage
-
+    # Сортируем результаты поиска
+    sorted_found_storage = sorted(found_storage, key=lambda x: (
+        get_vendor_priority(x[2]),
+        get_role_priority(x[3]),
+        x[0]
+    ))
+    
+    # Возвращаем в нужном формате (только имя и данные)
+    return [(item[0], item[1]) for item in sorted_found_storage]
 
 # -------------------------------
-# Получение данных Discovery
+# Получение данных Discovery (ОБНОВЛЕННАЯ ВЕРСИЯ С СОРТИРОВКОЙ)
 # -------------------------------
-# Улучшенная функция fetch_discovery_data в app.py
+# Replace the fetch_discovery_data function in app.py with this version:
+
 def fetch_discovery_data(table_filter):
-    """Получает последние данные discovery для указанной площадки"""
+    """Получает последние данные discovery для указанной площадки БЕЗ автоматической сортировки"""
     try:
         logger.info(f"Получение данных discovery для площадки {table_filter}")
         
@@ -1055,7 +1109,7 @@ def fetch_discovery_data(table_filter):
         logger.info(f"Найдено систем хранения: {list(storage_names)}")
         
         sorted_storage = []
-        for storage_name in sorted(storage_names):
+        for storage_name in storage_names:  # Убрана сортировка - просто перебираем как есть
             logger.info(f"Обработка данных для {storage_name}")
             storage_data = build_storage_data(storage_name, data, table_filter)
             sorted_storage.append((storage_name, storage_data))
@@ -1066,7 +1120,6 @@ def fetch_discovery_data(table_filter):
     except Exception as e:
         logger.exception(f"Ошибка при обработке данных discovery: {e}")
         return []
-
 
 # -------------------------------
 # Построение данных о системе хранения

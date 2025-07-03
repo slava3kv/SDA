@@ -13,9 +13,20 @@ def sectors_to_tib(sectors):
     if sectors is None:
         return 0.0
     try:
-        bytes_value = int(sectors) * 512
-        return round(bytes_value / (1024**4), 3)
-    except (ValueError, TypeError):
+        # Приводим к строке и очищаем от возможных пробелов
+        sectors_str = str(sectors).strip()
+        if not sectors_str or sectors_str == '0':
+            return 0.0
+        
+        sectors_float = float(sectors_str)
+        if sectors_float == 0:
+            return 0.0
+            
+        bytes_value = sectors_float * 512
+        tib_value = bytes_value / (1024**4)
+        return round(tib_value, 3)
+    except (ValueError, TypeError) as e:
+        logging.getLogger("huawei").warning(f"Ошибка конвертации секторов {sectors}: {e}")
         return 0.0
 
 
@@ -117,8 +128,8 @@ class HuaweiAPI:
             self.logger.exception(f"Ошибка при GET {endpoint} от {self.api_ip}")
             raise Exception(f"Ошибка при GET {endpoint} от {self.api_ip}") from e
 
-    def get_pools(self):
-        """Получает список пулов хранения"""
+    def get_storagepools(self):
+        """Получает список пулов хранения (используем правильный эндпоинт)"""
         return self.get("storagepool")
 
     def get_luns(self):
@@ -140,7 +151,7 @@ class HuaweiAPI:
 
 def perform_huawei_discovery(api_username, api_password, storage_ip, storage_name, logger):
     """
-    Выполняет discovery для Huawei Dorado системы
+    Выполняет discovery для Huawei Dorado системы (основано на рабочей версии)
     
     Returns:
         dict: Данные о пулах, LUN, инициаторах и метриках
@@ -154,99 +165,123 @@ def perform_huawei_discovery(api_username, api_password, storage_ip, storage_nam
     
     try:
         with HuaweiAPI(api_username, api_password, storage_ip, 8088, logger) as api:
-            # 1) Получаем пулы
+            # 1) Получаем пулы (используем правильный метод)
             logger.info(f"Получение пулов для {storage_name}")
-            pools_response = api.get_pools()
-            logger.info(f"Huawei pools response: {pools_response}")
+            storagepools_response = api.get_storagepools()
+            logger.info(f"Huawei pools response: {storagepools_response}")
             
-            pools_dict = {}  # Для связи пулов с LUN
+            # Группируем LUN по пулам для расчета подписки
+            pools_dict = {}
             
-            for pool in pools_response.get('data', []):
-                pool_size = pool.get('TOTALCAPACITY', '0')
-                pool_free = pool.get('FREECAPACITY', '0')
-                pool_used = pool.get('USEDCAPACITY', '0')
+            for pool in storagepools_response.get('data', []):
+                pool_name = pool.get('NAME', '').replace(' ', '_')
+                pool_id = pool.get('ID', '')
                 
-                logger.info(f"Huawei пул {pool.get('NAME', '')}: TOTALCAPACITY={pool_size}, FREECAPACITY={pool_free}, USEDCAPACITY={pool_used}")
+                # Используем правильные поля из рабочей версии
+                dataspace_sectors = pool.get('DATASPACE', 0)
+                subscribed_sectors = pool.get('SUBSCRIBEDCAPACITY', 0)
+                
+                # Логируем для отладки
+                logger.info(f"Пул {pool_name}: DATASPACE={dataspace_sectors}, SUBSCRIBEDCAPACITY={subscribed_sectors}")
                 
                 # Конвертируем в TiB
-                size_tib = sectors_to_tib(pool_size)
-                free_tib = sectors_to_tib(pool_free)
-                used_tib = sectors_to_tib(pool_used)
+                dataspace_tib = sectors_to_tib(dataspace_sectors)
+                subscribed_tib = sectors_to_tib(subscribed_sectors)
                 
-                pool_name = pool.get('NAME', '')
-                pool_id = pool.get('ID', '')
+                # Для совместимости с интерфейсом рассчитываем used и free
+                # Предполагаем, что subscribed ~ used, а free = dataspace - subscribed
+                used_tib = subscribed_tib
+                free_tib = max(0, dataspace_tib - subscribed_tib)
+                
                 pools_dict[pool_id] = {
                     'name': pool_name,
-                    'capacity': size_tib,
-                    'luns_size': 0  # Будет заполнено при обработке LUN
+                    'capacity': dataspace_tib
                 }
                 
                 pool_info = {
                     "storage_name": storage_name,
                     "pool_name": pool_name,
-                    "dataspace": size_tib,
+                    "dataspace": dataspace_tib,
                     "used_capacity": used_tib,
                     "free_capacity": free_tib,
-                    "subscribed_capacity": 0  # Будет обновлено позже
+                    "subscribed_capacity": subscribed_tib
                 }
                 all_pools.append(pool_info)
-                logger.info(f"Huawei пул добавлен: {pool_info}")
+                logger.info(f"Добавлен пул: {pool_info}")
 
             # 2) Получаем LUN
             logger.info(f"Получение LUN для {storage_name}")
             luns_response = api.get_luns()
             logger.info(f"Huawei LUN response: найдено {len(luns_response.get('data', []))} LUN")
             
-            # Группируем LUN по пулам для расчета подписки
-            luns_by_pool = {}
-            
             for lun in luns_response.get('data', []):
-                lun_capacity = lun.get('CAPACITY', '0')
-                lun_size_tib = sectors_to_tib(lun_capacity)
+                lun_name = lun.get('NAME', '').replace(' ', '_')
+                lun_wwn = lun.get('WWN', '').replace(' ', '_')
+                
+                # Используем логику из рабочей версии для размера
+                lun_capacity = lun.get('CAPACITY', 0)
+                lun_sector_size = lun.get('SECTORSIZE', 512)
+                
+                if lun_capacity and lun_sector_size:
+                    # (CAPACITY * SECTORSIZE) / (1024^4)
+                    lun_size_tib = sectors_to_tib(int(lun_capacity) * (int(lun_sector_size) / 512.0))
+                else:
+                    lun_size_tib = 0.0
                 
                 # Получаем ID пула
                 parent_id = lun.get('PARENTID', '')
-                
-                if parent_id not in luns_by_pool:
-                    luns_by_pool[parent_id] = 0
-                luns_by_pool[parent_id] += lun_size_tib
 
                 lun_info = {
                     "storage_name": storage_name,
-                    "name": lun.get('NAME', ''),
+                    "name": lun_name,
                     "size": lun_size_tib,
-                    "wwn": lun.get('WWN', ''),
+                    "wwn": lun_wwn,
                     "pool_id": parent_id
                 }
                 all_luns.append(lun_info)
 
-            # 3) Обновляем информацию о подписке для пулов
-            for pool in all_pools:
-                # Находим ID пула по имени
-                pool_id = None
-                for pid, pinfo in pools_dict.items():
-                    if pinfo['name'] == pool['pool_name']:
-                        pool_id = pid
-                        break
+            # 3) Получаем инициаторы (используем логику из рабочей версии)
+            logger.info(f"Получение инициаторов для {storage_name}")
+            try:
+                inits_response = api.get_initiators()
+                logger.info(f"Huawei initiators response: найдено {len(inits_response.get('data', []))} инициаторов")
                 
-                if pool_id:
-                    luns_total_size = luns_by_pool.get(pool_id, 0)
-                    pool['subscribed_capacity'] = luns_total_size
-                    logger.info(f"Huawei пул {pool['pool_name']}: подписка обновлена до {luns_total_size} TiB")
+                for init in inits_response.get('data', []):
+                    initiator_id = init.get("ID", "")
+                    parent_name = init.get("PARENTNAME", "")
+                    host_ip = init.get("hostIP", "")
+                    running_status = init.get("RUNNINGSTATUS", "")
+                    
+                    # Используем правильный маппинг статусов из рабочей версии
+                    if running_status == "27":
+                        init_status = "Online"
+                    elif running_status == "28":
+                        init_status = "Offline"
+                    else:
+                        init_status = running_status
+                    
+                    initiator_info = {
+                        "storage_name": storage_name,
+                        "iqn": initiator_id,
+                        "host_name": parent_name,
+                        "init_status": init_status,
+                        "hostIP": host_ip
+                    }
+                    all_initiators.append(initiator_info)
+                    
+            except Exception as e:
+                logger.warning(f"Не удалось получить инициаторы для {storage_name}: {e}")
 
-            # 4) Эффективная емкость
+            # 4) Эффективная емкость (как в рабочей версии)
             logger.info(f"Получение эффективной емкости для {storage_name}")
             current_total_effective_tb = 0.0
             try:
                 effective_capacity_response = api.get_effective_capacity_info()
-                logger.info(f"Huawei effective capacity response: {effective_capacity_response}")
                 
                 if (effective_capacity_response and 
                     'data' in effective_capacity_response and 
                     effective_capacity_response['data']):
-                    total_effective_sectors = effective_capacity_response['data'].get(
-                        'totalEffectiveCapacity'
-                    )
+                    total_effective_sectors = effective_capacity_response['data'].get('totalEffectiveCapacity')
                     if total_effective_sectors is not None:
                         current_total_effective_tb = sectors_to_tib(total_effective_sectors)
                         logger.info(f"Эффективная емкость для {storage_name}: {current_total_effective_tb} TiB")
@@ -263,28 +298,14 @@ def perform_huawei_discovery(api_username, api_password, storage_ip, storage_nam
             except Exception as e:
                 logger.warning(f"Ошибка получения эффективной емкости для {storage_name}: {e}")
             
+            # Если не удалось получить эффективную емкость, используем сумму dataspace пулов
+            if current_total_effective_tb == 0:
+                current_total_effective_tb = sum(pool['dataspace'] for pool in all_pools)
+                logger.info(f"Используем сумму dataspace пулов как эффективную емкость: {current_total_effective_tb} TiB")
+            
             storage_metrics[storage_name] = {
                 "total_effective_tb": current_total_effective_tb
             }
-
-            # 5) Получаем инициаторы
-            logger.info(f"Получение инициаторов для {storage_name}")
-            try:
-                initiators_response = api.get_initiators()
-                logger.info(f"Huawei initiators response: найдено {len(initiators_response.get('data', []))} инициаторов")
-                
-                for initiator in initiators_response.get('data', []):
-                    initiator_info = {
-                        "storage_name": storage_name,
-                        "iqn": initiator.get('ID', ''),
-                        "host_name": initiator.get('USECHAP', ''),  # Может быть другое поле
-                        "init_status": "Online" if initiator.get('RUNNINGSTATUS') == '28' else "Offline",
-                        "hostIP": ""  # Huawei не всегда предоставляет IP
-                    }
-                    all_initiators.append(initiator_info)
-                    
-            except Exception as e:
-                logger.warning(f"Не удалось получить инициаторы для {storage_name}: {e}")
 
             logger.info(
                 f"Huawei Discovery завершен для {storage_name}: "
