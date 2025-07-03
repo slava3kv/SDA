@@ -1,0 +1,215 @@
+<!-- storage_form.html -->
+<!-- Copyright (c) 2025 <Tretyakov Vyacheslav>
+See README.md file in the project root for full license information. -->
+
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Huawei Discovery Application</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <style>
+      .storage-table td.storage-name,
+      .storage-table td.storage-role,
+      .storage-table td.storage-status {
+        min-width: 200px; /* Минимальная ширина столбцов */
+        word-break: break-word; /* Перенос длинных строк */
+        text-align: left; /* Выравнивание текста */
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="nav-wrapper">
+        <a href="#" class="brand-logo center">Добавление систем хранения данных в локальную базу</a>
+      </div>
+    </nav>
+    <div class="container" style="margin-top: 30px;">
+      <h5>Выполнить поиск и добавить системы хранения данных из NetBox</h5>
+      <form method="post" action="{{ url_for('sync_netbox') }}" id="netbox-form">
+        <div class="input-pod">
+          <label for="site">Введите имя площадки</label>
+          <input type="text" name="site" id="site" required pattern="pd\d\d" placeholder="Например, pd01">
+        </div>
+        <div class="input-pod">
+          <label for="api_token">Введите NetBox API_TOKEN</label>
+          <input type="text" name="api_token" id="api_token" required placeholder="Например, 43a69b86haefa7c8339b5469b6c43a00000c5">
+        </div>
+        <button class="btn waves-effect waves-light" type="submit">
+          ВЫПОЛНИТЬ ПОИСК
+        </button>
+        <div id="netbox-progress" class="progress" style="display: none; margin-top: 20px;">
+          <div class="indeterminate"></div>
+        </div>
+        <div id="netbox-progress-text" style="display: none;">
+          Выполняется поиск в NetBox...
+        </div>
+      </form>
+      <br>
+
+      <!-- Спойлер для ручного добавления -->
+      <details class="manual-add-spoiler">
+        <summary class="manual-add-summary">
+          <h5>Добавить вручную</h5>
+        </summary>
+        <div class="manual-add-content">
+          <form method="post">
+            <label for="storage_name_manual">Имя системы хранения</label>
+            <input class="manual-input" type="text" name="storage_name_manual" id="storage_name_manual" required placeholder="Например, pd01-dor5000-001">
+            
+            <label for="ip_address_manual">IP-адрес системы хранения</label>
+            <input class="manual-input" type="text" name="ip_address_manual" id="ip_address_manual" required>
+            
+            <label for="storage_role_manual">Роль системы хранения</label>
+            <input class="manual-input" type="text" name="storage_role_manual" id="storage_role_manual" placeholder="Например, Storage">
+            
+            <label for="storage_status_manual">Статус системы хранения</label>
+            <input class="manual-input" type="text" name="storage_status_manual" id="storage_status_manual" placeholder="Например, Active">
+            
+            <!-- НОВОЕ ПОЛЕ VENDOR -->
+            <label for="vendor_manual">Вендор системы хранения</label>
+            <select class="manual-input" name="vendor_manual" id="vendor_manual" required>
+              <option value="Huawei" selected>Huawei</option>
+              <option value="NetApp">NetApp</option>
+              <option value="IBM">IBM</option>
+            </select>
+            
+            <label for="table_name_manual">Имя площадки</label>
+            <input class="manual-input" type="text" name="table_name_manual" id="table_name_manual" required pattern="pd\d\d" placeholder="Например, pd01">
+            
+            <button class="btn waves-effect waves-light" type="submit" name="submit_manual">
+              ДОБАВИТЬ ВРУЧНУЮ
+            </button>
+          </form>
+        </div>
+      </details>
+      <br>
+
+      {% if message %}
+        {% if "Ошибка" in message %}
+          <div class="card-panel red lighten-2">{{ message }}</div>
+        {% else %}
+          <div class="card-panel green lighten-2">{{ message }}</div>
+        {% endif %}
+      {% endif %}
+      <br>
+
+      <h5>Показать добавленные СХД</h5>
+      {% if distinct_tables %}
+        <div class="storage-controls">
+          <form method="get" action="{{ url_for('storage_form') }}" class="storage-form">
+            <div class="input-field">
+              <select name="table_filter">
+                {% for t in distinct_tables %}
+                  <option value="{{ t }}" {% if table_filter == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn waves-effect waves-light storage-btn" type="submit">
+              ПОКАЗАТЬ
+            </button>
+          </form>
+          <a class="btn waves-effect waves-light storage-btn discovery-btn" href="{{ url_for('discovery_form', table_filter=table_filter) }}">
+            ПЕРЕЙТИ К ОБЗОРУ ВЫБРАННОЙ ПЛОЩАДКИ
+          </a>
+        </div>
+        <br>
+
+        {% if table_filter %}
+          <h5>Сохраненные системы хранения (Всего: {{ storages|length }})</h5>
+          {% if storages %}
+            <table class="striped responsive-table storage-table">
+              <thead>
+                <tr>
+                  <th>№</th>
+                  <th>Площадка</th>
+                  <th>Вендор</th> <!-- НОВАЯ КОЛОНКА -->
+                  <th>Имя системы хранения</th>
+                  <th>IP-адрес</th>
+                  <th>Роль</th>
+                  <th>Статус</th>
+                  <th>Дата обновления</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in storages %}
+                  <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ s.table_name }}</td>
+                    <td>{{ s.vendor or 'Huawei' }}</td> <!-- НОВАЯ КОЛОНКА -->
+                    <td class="storage-name"><a href="https://{{ s.ip_address }}:8088" target="_blank">{{ s.storage_name }}</a></td>
+                    <td>{{ s.ip_address }}</td>
+                    <td class="storage-role">{{ s.storage_role or 'Не указано' }}</td>
+                    <td class="storage-status">{{ s.storage_status or 'Не указано' }}</td>
+                    <td>
+                      {% if s.last_updated %}
+                        [Дата обновления информации: {{ s.last_updated.strftime('%d.%m.%Y %H:%M') }}]
+                      {% else %}
+                        [Дата обновления информации: Не обновлялось]
+                      {% endif %}
+                    </td>
+                    <td>
+                      <a class="dropdown-trigger btn" href="#" data-target="dropdown-{{ s.id }}">ДЕЙСТВИЯ</a>
+                      <ul id="dropdown-{{ s.id }}" class="dropdown-content">
+                        <li>
+                          <a href="#!" onclick="renameRecord({{ s.id }}, '{{ s.storage_name }}');">Переименовать</a>
+                        </li>
+                        <li>
+                          <a href="#!" onclick="if(confirm('Удалить запись?')) { document.getElementById('delete-form-{{ s.id }}').submit(); }">Удалить</a>
+                        </li>
+                      </ul>
+                      <form id="delete-form-{{ s.id }}" method="post" action="{{ url_for('delete_storage', record_id=s.id) }}" style="display: none;"></form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p>Системы хранения для данной площадки не найдены.</p>
+          {% endif %}
+        {% endif %}
+      {% else %}
+        <p>В базе данных пока нет ни одной системы хранения. Добавьте СХД вручную или через синхронизацию с NetBox.</p>
+      {% endif %}
+      <br><br>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        var elemsSelect = document.querySelectorAll('select');
+        M.FormSelect.init(elemsSelect, {});
+        var elemsDropdown = document.querySelectorAll('.dropdown-trigger');
+        M.Dropdown.init(elemsDropdown, {coverTrigger: false});
+
+        // Показ прогресс-бара при отправке формы NetBox
+        var netboxForm = document.getElementById("netbox-form");
+        if (netboxForm) {
+          netboxForm.addEventListener("submit", function() {
+            document.getElementById("netbox-progress").style.display = "block";
+            document.getElementById("netbox-progress-text").style.display = "block";
+          });
+        }
+      });
+
+      function renameRecord(recordId, currentName) {
+        var newName = prompt("Введите новое имя для записи:", currentName);
+        if (newName && newName.trim() !== "" && newName !== currentName) {
+          var form = document.createElement("form");
+          form.method = "POST";
+          form.action = "/rename/" + recordId;
+          var input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "new_name";
+          input.value = newName;
+          form.appendChild(input);
+          document.body.appendChild(form);
+          form.submit();
+        }
+      }
+    </script>
+  </body>
+</html>
