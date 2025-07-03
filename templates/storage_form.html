@@ -7,7 +7,7 @@ See README.md file in the project root for full license information. -->
   <head>
     <meta charset="utf-8">
     <title>Huawei Discovery Application</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='materialize/css/materialize.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <style>
@@ -177,7 +177,7 @@ See README.md file in the project root for full license information. -->
       <br><br>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <script src="{{ url_for('static', filename='materialize/js/materialize.min.js') }}"></script>
     <script>
       document.addEventListener('DOMContentLoaded', function() {
         var elemsSelect = document.querySelectorAll('select');
